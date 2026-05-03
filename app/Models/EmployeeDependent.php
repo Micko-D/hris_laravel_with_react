@@ -33,7 +33,7 @@ class EmployeeDependent extends Model
     ];
 
     protected $casts = [
-        'birth_date' => 'date',
+        'birth_date' => 'datetime',
         'is_dependent_for_tax' => 'boolean',
     ];
 

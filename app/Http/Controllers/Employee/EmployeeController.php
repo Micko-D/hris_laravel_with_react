@@ -55,7 +55,8 @@ class EmployeeController extends Controller
             'remarks' => 'Initial hiring',
         ]);
 
-        return redirect("/employees/{$employee->id}/edit")->with('success', 'Employee created successfully.');
+        return redirect("/employees/{$employee->id}/edit")
+            ->with('success', 'Employee created successfully.');
     }
 
     public function show(Employee $employee)

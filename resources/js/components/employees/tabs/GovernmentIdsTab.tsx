@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,9 +18,7 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from '@/components/ui/dialog'
-import { useForm } from '@inertiajs/react'
 import type { GovernmentId } from '@/types/employee'
 
 const ID_TYPES = [
@@ -29,73 +28,131 @@ const ID_TYPES = [
     { value: 'pagibig', label: 'Pag-IBIG / HDMF Number' },
 ]
 
+const MAX_ID_NUMBER_LENGTH = 50
+const MAX_REMARKS_LENGTH = 255
+
+interface DeleteTarget {
+    id: string
+    label: string
+}
+
 interface GovernmentIdsTabProps {
     governmentIds: GovernmentId[]
     employeeId?: string
     readonly?: boolean
+    onMutate?: () => void
 }
 
 export function GovernmentIdsTab({
     governmentIds,
     employeeId,
     readonly = false,
+    onMutate,
 }: GovernmentIdsTabProps) {
     const [open, setOpen] = useState(false)
     const [editingId, setEditingId] = useState<string | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
 
-    const { data, setData, post, put, delete: destroy, processing, reset } = useForm({
-        type: 'tin' as 'tin' | 'sss' | 'philhealth' | 'pagibig',
-        number: '',
-        remarks: '',
-    })
+    const [type, setType] = useState<'tin' | 'sss' | 'philhealth' | 'pagibig'>('tin')
+    const [number, setNumber] = useState('')
+    const [remarks, setRemarks] = useState('')
+    const [processing, setProcessing] = useState(false)
 
-    const handleAdd = () => {
-        reset()
+    const openAdd = () => {
+        setType('tin')
+        setNumber('')
+        setRemarks('')
         setEditingId(null)
         setOpen(true)
     }
 
-    const handleEdit = (id: GovernmentId) => {
-        setData({
-            type: id.type as 'tin' | 'sss' | 'philhealth' | 'pagibig',
-            number: id.number,
-            remarks: id.remarks ?? '',
-        })
-        setEditingId(id.id)
+    const openEdit = (gid: GovernmentId) => {
+        setType(gid.type as 'tin' | 'sss' | 'philhealth' | 'pagibig')
+        setNumber(gid.number)
+        setRemarks(gid.remarks ?? '')
+        setEditingId(gid.id)
         setOpen(true)
     }
 
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (!employeeId) return
 
-        if (editingId) {
-            put(`/api/v1/employees/${employeeId}/government-ids/${editingId}`, {
-                onSuccess: () => {
-                    setOpen(false)
-                    reset()
-                    setEditingId(null)
-                },
+        if (!number.trim()) {
+            toast.error('ID number is required.')
+            return
+        }
+        if (number.length > MAX_ID_NUMBER_LENGTH) {
+            toast.error(`ID number must not exceed ${MAX_ID_NUMBER_LENGTH} characters.`)
+            return
+        }
+        if (remarks.length > MAX_REMARKS_LENGTH) {
+            toast.error(`Remarks must not exceed ${MAX_REMARKS_LENGTH} characters.`)
+            return
+        }
+
+        setProcessing(true)
+
+        try {
+            const isEdit = !!editingId
+            const url = isEdit
+                ? `/api/v1/employees/${employeeId}/government-ids/${editingId}`
+                : `/api/v1/employees/${employeeId}/government-ids`
+
+            const res = await fetch(url, {
+                method: isEdit ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ type, number, remarks }),
             })
-        } else {
-            post(`/api/v1/employees/${employeeId}/government-ids`, {
-                onSuccess: () => {
-                    setOpen(false)
-                    reset()
-                },
-            })
+
+            const data = await res.json()
+
+            if (!res.ok) {
+                toast.error(Object.values(data.errors ?? {}).flat()[0] as string || 'Something went wrong.')
+                return
+            }
+
+            toast.success(isEdit ? 'Government ID updated.' : 'Government ID added.')
+            setOpen(false)
+            onMutate?.()
+        } catch {
+            toast.error('Network error. Please try again.')
+        } finally {
+            setProcessing(false)
         }
     }
 
-    const handleDelete = (id: string) => {
-        if (!employeeId) return
-        destroy(`/api/v1/employees/${employeeId}/government-ids/${id}`)
+    const handleDelete = async () => {
+        if (!employeeId || !deleteTarget) return
+        const id = deleteTarget.id
+
+        try {
+            const res = await fetch(
+                `/api/v1/employees/${employeeId}/government-ids/${id}`,
+                { method: 'DELETE', headers: { Accept: 'application/json' } }
+            )
+
+            const text = await res.text()
+            let data: { errors?: unknown; message?: string } = {}
+            try { data = JSON.parse(text) } catch {}
+
+            if (!res.ok) {
+                toast.error(Object.values(data.errors ?? {}).flat()[0] as string || `Delete failed (HTTP ${res.status})`)
+                return
+            }
+
+            toast.success('Government ID deleted.')
+            setDeleteTarget(null)
+            onMutate?.()
+        } catch {
+            toast.error('Network error. Please try again.')
+        }
     }
 
     return (
         <div className="space-y-4">
             {!readonly && (
                 <div className="flex justify-end">
-                    <Button onClick={handleAdd}>
+                    <Button onClick={openAdd} type="button">
                         <Plus className="size-4" />
                         Add ID
                     </Button>
@@ -133,14 +190,19 @@ export function GovernmentIdsTab({
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    onClick={() => handleEdit(gid)}
+                                                    onClick={() => openEdit(gid)}
                                                 >
                                                     <Pencil className="size-4" />
                                                 </Button>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    onClick={() => handleDelete(gid.id)}
+                                                    onClick={() =>
+                                                        setDeleteTarget({
+                                                            id: gid.id,
+                                                            label: `${ID_TYPES.find((t) => t.value === gid.type)?.label ?? gid.type} ${gid.number}`,
+                                                        })
+                                                    }
                                                 >
                                                     <Trash2 className="size-4 text-destructive" />
                                                 </Button>
@@ -154,7 +216,27 @@ export function GovernmentIdsTab({
                 </div>
             )}
 
-            {/* Add/Edit Dialog */}
+            {/* Delete confirmation dialog */}
+            <Dialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete Government ID?</DialogTitle>
+                        <DialogDescription>
+                            This will permanently remove &quot;{deleteTarget?.label}&quot; from this employee. This action cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteTarget(null)} type="button">
+                            Cancel
+                        </Button>
+                        <Button variant="destructive" onClick={handleDelete} type="button">
+                            Delete
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Add/Edit dialog */}
             <Dialog open={open} onOpenChange={setOpen}>
                 <DialogContent>
                     <DialogHeader>
@@ -168,10 +250,7 @@ export function GovernmentIdsTab({
                     <div className="grid gap-4 py-4">
                         <div className="space-y-1.5">
                             <Label>ID Type *</Label>
-                            <Select
-                                value={data.type}
-                                onValueChange={(v) => setData('type', v as typeof data.type)}
-                            >
+                            <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
                                 <SelectTrigger>
                                     <SelectValue />
                                 </SelectTrigger>
@@ -187,24 +266,34 @@ export function GovernmentIdsTab({
                         <div className="space-y-1.5">
                             <Label>ID Number *</Label>
                             <Input
-                                value={data.number}
-                                onChange={(e) => setData('number', e.target.value)}
+                                value={number}
+                                maxLength={MAX_ID_NUMBER_LENGTH}
+                                onChange={(e) => setNumber(e.target.value)}
+                                placeholder="e.g. 123-456-789-000"
                             />
+                            <p className="text-xs text-muted-foreground">
+                                Required. Max {MAX_ID_NUMBER_LENGTH} characters.
+                            </p>
                         </div>
                         <div className="space-y-1.5">
                             <Label>Remarks</Label>
                             <Input
-                                value={data.remarks}
-                                onChange={(e) => setData('remarks', e.target.value)}
+                                value={remarks}
+                                maxLength={MAX_REMARKS_LENGTH}
+                                onChange={(e) => setRemarks(e.target.value)}
+                                placeholder="Optional notes about this ID"
                             />
+                            <p className="text-xs text-muted-foreground">
+                                Max {MAX_REMARKS_LENGTH} characters ({remarks.length}/{MAX_REMARKS_LENGTH})
+                            </p>
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setOpen(false)}>
+                        <Button variant="outline" onClick={(e) => { e.stopPropagation(); setOpen(false) }} type="button">
                             Cancel
                         </Button>
-                        <Button onClick={handleSubmit} disabled={processing}>
-                            {editingId ? 'Update' : 'Add'}
+                        <Button onClick={(e) => { e.stopPropagation(); handleSubmit() }} disabled={processing} type="button">
+                            {processing ? 'Saving...' : editingId ? 'Update' : 'Add'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

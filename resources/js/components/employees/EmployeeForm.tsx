@@ -1,15 +1,8 @@
 import { useState } from 'react'
-import { useForm } from '@inertiajs/react'
-import { Save, X } from 'lucide-react'
+import { router } from '@inertiajs/react'
+import { Save } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select'
 import { PersonalInfoTab } from './tabs/PersonalInfoTab'
 import { GovernmentIdsTab } from './tabs/GovernmentIdsTab'
 import { EmploymentTab } from './tabs/EmploymentTab'
@@ -40,50 +33,91 @@ const TABS: { id: TabId; label: string }[] = [
     { id: 'history', label: 'History' },
 ]
 
+function toDateValue(value: string | Date | null | undefined): string {
+    if (!value) return ''
+    if (value instanceof Date) return value.toISOString().split('T')[0]
+    return value.split('T')[0]
+}
+
+const SESSION_TAB_KEY = 'hris_employee_active_tab'
+
 export function EmployeeForm({
     employee,
     departments,
     positions,
-    governmentIds = [],
-    dependents = [],
-    documents = [],
-    employmentHistories = [],
+    governmentIds: initialGovernmentIds = [],
+    dependents: initialDependents = [],
+    documents: initialDocuments = [],
+    employmentHistories: initialHistories = [],
     mode,
 }: EmployeeFormProps) {
-    const [activeTab, setActiveTab] = useState<TabId>('personal')
+    const [activeTab, setActiveTab] = useState<TabId>(() => {
+        if (typeof sessionStorage !== 'undefined') {
+            return (sessionStorage.getItem(SESSION_TAB_KEY) as TabId) ?? 'personal'
+        }
+        return 'personal'
+    })
 
-    const { data, setData, post, put, processing, errors } = useForm<EmployeeFormData>({
+    const [governmentIds, setGovernmentIds] = useState<GovernmentId[]>(initialGovernmentIds)
+    const [dependents, setDependents] = useState<EmployeeDependent[]>(initialDependents)
+    const [documents, setDocuments] = useState<EmployeeDocument[]>(initialDocuments)
+    const [employmentHistories, setEmploymentHistories] = useState<EmploymentHistory[]>(initialHistories)
+
+    const [data, setData] = useState<EmployeeFormData>({
         first_name: employee?.first_name ?? '',
         last_name: employee?.last_name ?? '',
-        middle_name: employee?.middle_name ?? null,
-        suffix: employee?.suffix ?? null,
-        birth_date: employee?.birth_date ?? '',
+        middle_name: employee?.middle_name ?? '',
+        suffix: employee?.suffix ?? '',
+        birth_date: toDateValue(employee?.birth_date),
         gender: employee?.gender ?? 'male',
         civil_status: employee?.civil_status ?? 'single',
         nationality: employee?.nationality ?? 'Filipino',
         email: employee?.email ?? '',
-        phone: employee?.phone ?? null,
-        address_region: employee?.address_region ?? null,
-        address_province: employee?.address_province ?? null,
-        address_city: employee?.address_city ?? null,
-        address_barangay: employee?.address_barangay ?? null,
-        address_street: employee?.address_street ?? null,
-        department_id: employee?.department_id ?? null,
-        position_id: employee?.position_id ?? null,
+        phone: employee?.phone ?? '',
+        address_region: employee?.address_region ?? '',
+        address_province: employee?.address_province ?? '',
+        address_city: employee?.address_city ?? '',
+        address_barangay: employee?.address_barangay ?? '',
+        address_street: employee?.address_street ?? '',
+        department_id: employee?.department_id ?? '',
+        position_id: employee?.position_id ?? '',
         employment_status: employee?.employment_status ?? 'probationary',
-        hire_date: employee?.hire_date ?? '',
-        end_date: employee?.end_date ?? null,
-        tin: employee?.tin ?? null,
-        sss_number: employee?.sss_number ?? null,
-        philhealth_number: employee?.philhealth_number ?? null,
-        pagibig_number: employee?.pagibig_number ?? null,
+        hire_date: toDateValue(employee?.hire_date),
+        end_date: toDateValue(employee?.end_date),
+        tin: employee?.tin ?? '',
+        sss_number: employee?.sss_number ?? '',
+        philhealth_number: employee?.philhealth_number ?? '',
+        pagibig_number: employee?.pagibig_number ?? '',
     })
+
+    const handleSubResourceChange = () => {
+        if (!employee?.id) return
+        sessionStorage.setItem(SESSION_TAB_KEY, activeTab)
+        router.get(`/employees/${employee.id}/edit`, {}, { preserveScroll: true })
+    }
+
+    const handleSetData = (key: keyof EmployeeFormData, value: string) => {
+        setData((prevData) => ({
+            ...prevData,
+            [key]: value,
+        }))
+    }
 
     const handleSubmit = () => {
         if (mode === 'create') {
-            post('/api/v1/employees')
+            router.post('/employees', data, {
+                onSuccess: () => {
+                    toast.success('Employee created successfully.')
+                    router.visit('/employees', { method: 'get' })
+                },
+            })
         } else {
-            put(`/api/v1/employees/${employee!.id}`)
+            router.put(`/employees/${employee!.id}`, data, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    toast.success('Employee updated successfully.')
+                },
+            })
         }
     }
 
@@ -91,14 +125,16 @@ export function EmployeeForm({
 
     return (
         <div className="flex flex-col gap-6">
-            {/* Tab Navigation */}
             <div className="border-b">
                 <nav className="flex gap-1 -mb-px overflow-x-auto">
                     {TABS.map((tab) => (
                         <button
                             key={tab.id}
                             type="button"
-                            onClick={() => setActiveTab(tab.id)}
+                            onClick={() => {
+                                setActiveTab(tab.id)
+                                sessionStorage.setItem(SESSION_TAB_KEY, tab.id)
+                            }}
                             className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
                                 activeTab === tab.id
                                     ? 'border-primary text-primary'
@@ -111,13 +147,12 @@ export function EmployeeForm({
                 </nav>
             </div>
 
-            {/* Tab Content */}
             <div className="min-h-[400px]">
                 {activeTab === 'personal' && (
                     <PersonalInfoTab
                         data={data}
-                        setData={setData}
-                        errors={errors}
+                        setData={handleSetData}
+                        errors={{}}
                         readonly={isReadonly}
                     />
                 )}
@@ -126,13 +161,14 @@ export function EmployeeForm({
                         governmentIds={governmentIds}
                         employeeId={employee?.id}
                         readonly={isReadonly}
+                        onMutate={handleSubResourceChange}
                     />
                 )}
                 {activeTab === 'employment' && (
                     <EmploymentTab
                         data={data}
-                        setData={setData}
-                        errors={errors}
+                        setData={handleSetData}
+                        errors={{}}
                         departments={departments}
                         positions={positions}
                         readonly={isReadonly}
@@ -143,6 +179,7 @@ export function EmployeeForm({
                         documents={documents}
                         employeeId={employee?.id}
                         readonly={isReadonly}
+                        onMutate={handleSubResourceChange}
                     />
                 )}
                 {activeTab === 'dependents' && (
@@ -150,6 +187,7 @@ export function EmployeeForm({
                         dependents={dependents}
                         employeeId={employee?.id}
                         readonly={isReadonly}
+                        onMutate={handleSubResourceChange}
                     />
                 )}
                 {activeTab === 'history' && (
@@ -160,13 +198,9 @@ export function EmployeeForm({
                 )}
             </div>
 
-            {/* Form Actions */}
-            {!isReadonly && (
-                <div className="flex justify-end gap-3 border-t pt-4">
-                    <Button variant="outline" asChild>
-                        <a href="/employees">Cancel</a>
-                    </Button>
-                    <Button onClick={handleSubmit} disabled={processing}>
+            {mode !== 'view' && (
+                <div className="flex justify-end gap-2 border-t pt-4">
+                    <Button onClick={handleSubmit}>
                         <Save className="size-4" />
                         {mode === 'create' ? 'Create Employee' : 'Save Changes'}
                     </Button>

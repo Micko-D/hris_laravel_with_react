@@ -37,44 +37,47 @@ class EmployeeController extends Controller
             $query->where('employment_status', $request->employment_status);
         }
 
-        $perPage = $request->integer('per_page', 15);
-        $employees = $query->orderBy('created_at', 'desc')->paginate($perPage);
+        $employees = $query->orderBy('created_at', 'desc')->paginate(15);
 
-        return response()->json($employees);
+        return response()->json([
+            'data' => $employees->items(),
+            'meta' => [
+                'current_page' => $employees->currentPage(),
+                'last_page' => $employees->lastPage(),
+                'per_page' => $employees->perPage(),
+                'total' => $employees->total(),
+            ],
+        ]);
     }
 
     public function store(Request $request): JsonResponse
     {
         $validated = $this->validateEmployee($request);
 
+        $validated['employee_number'] = $this->generateEmployeeNumber();
         $employee = Employee::create($validated);
 
-        // Log initial employment history
-        EmploymentHistory::create([
-            'employee_id' => $employee->id,
-            'department_id' => $employee->department_id,
-            'position_id' => $employee->position_id,
-            'employment_status' => $employee->employment_status,
-            'effective_date' => $employee->hire_date,
-            'remarks' => 'Initial hiring',
-        ]);
+        // Sync government IDs
+        if ($request->has('government_ids')) {
+            foreach ($request->government_ids as $gid) {
+                GovernmentId::create([
+                    'employee_id' => $employee->id,
+                    'type' => $gid['type'],
+                    'number' => $gid['number'],
+                    'remarks' => $gid['remarks'] ?? null,
+                ]);
+            }
+        }
 
         return response()->json([
-            'data' => $employee->load(['department', 'position']),
+            'data' => $employee->load(['department', 'position', 'governmentIds']),
             'message' => 'Employee created successfully.',
         ], 201);
     }
 
     public function show(Employee $employee): JsonResponse
     {
-        $employee->load([
-            'department',
-            'position',
-            'governmentIds',
-            'documents',
-            'dependents',
-            'employmentHistories' => fn ($q) => $q->orderBy('effective_date', 'desc'),
-        ]);
+        $employee->load(['department', 'position', 'governmentIds', 'documents', 'dependents', 'employmentHistories']);
 
         return response()->json(['data' => $employee]);
     }
@@ -83,29 +86,23 @@ class EmployeeController extends Controller
     {
         $validated = $this->validateEmployee($request, $employee->id);
 
-        $oldDept = $employee->department_id;
-        $oldPos = $employee->position_id;
-        $oldStatus = $employee->employment_status;
-
         $employee->update($validated);
 
-        // Log history if employment details changed
-        if ($oldDept !== $employee->department_id
-            || $oldPos !== $employee->position_id
-            || $oldStatus !== $employee->employment_status
-        ) {
-            EmploymentHistory::create([
-                'employee_id' => $employee->id,
-                'department_id' => $employee->department_id,
-                'position_id' => $employee->position_id,
-                'employment_status' => $employee->employment_status,
-                'effective_date' => now(),
-                'remarks' => 'Employment details updated via employee edit.',
-            ]);
+        // Sync government IDs
+        if ($request->has('government_ids')) {
+            GovernmentId::where('employee_id', $employee->id)->delete();
+            foreach ($request->government_ids as $gid) {
+                GovernmentId::create([
+                    'employee_id' => $employee->id,
+                    'type' => $gid['type'],
+                    'number' => $gid['number'],
+                    'remarks' => $gid['remarks'] ?? null,
+                ]);
+            }
         }
 
         return response()->json([
-            'data' => $employee->load(['department', 'position']),
+            'data' => $employee->load(['department', 'position', 'governmentIds']),
             'message' => 'Employee updated successfully.',
         ]);
     }
@@ -114,17 +111,71 @@ class EmployeeController extends Controller
     {
         $employee->delete();
 
-        return response()->json([
-            'message' => 'Employee deleted successfully.',
-        ]);
+        return response()->json(['message' => 'Employee deleted successfully.']);
+    }
+
+    protected function validateEmployee(Request $request, ?string $excludeId = null): array
+    {
+        $rules = [
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'middle_name' => 'nullable|string|max:255',
+            'suffix' => 'nullable|string|max:10',
+            'birth_date' => 'required|date|before:today',
+            'gender' => 'required|in:male,female',
+            'civil_status' => 'required|in:single,married,widowed,separated',
+            'nationality' => 'nullable|string|max:100',
+            'email' => 'required|email|max:255',
+            'phone' => 'nullable|string|max:30',
+            'address_region' => 'nullable|string|max:100',
+            'address_province' => 'nullable|string|max:100',
+            'address_city' => 'nullable|string|max:100',
+            'address_barangay' => 'nullable|string|max:100',
+            'address_street' => 'nullable|string|max:255',
+            'department_id' => 'nullable|uuid|exists:departments,id',
+            'position_id' => 'nullable|uuid|exists:positions,id',
+            'employment_status' => 'required|in:probationary,regular,contractual,resigned,terminated',
+            'hire_date' => 'required|date|before:tomorrow',
+            'end_date' => 'nullable|date|after:hire_date',
+            'tin' => 'nullable|string|max:30',
+            'sss_number' => 'nullable|string|max:30',
+            'philhealth_number' => 'nullable|string|max:30',
+            'pagibig_number' => 'nullable|string|max:30',
+            'government_ids' => 'nullable|array',
+            'government_ids.*.type' => 'required_with:government_ids|in:tin,sss,philhealth,pagibig',
+            'government_ids.*.number' => 'required_with:government_ids|string|max:50',
+            'government_ids.*.remarks' => 'nullable|string|max:255',
+        ];
+
+        $validated = $request->validate($rules);
+
+        if ($excludeId) {
+            $validated['email'] = $validated['email'] . '|unique:employees,email,' . $excludeId . ',id';
+        }
+
+        return $validated;
+    }
+
+    protected function generateEmployeeNumber(): string
+    {
+        $year = date('Y');
+        $lastEmployee = Employee::whereYear('created_at', $year)
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if ($lastEmployee && preg_match('/EMP-' . $year . '-(\d+)/', $lastEmployee->employee_number, $matches)) {
+            $nextNumber = ((int) $matches[1]) + 1;
+        } else {
+            $nextNumber = 1;
+        }
+
+        return 'EMP-' . $year . '-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
     }
 
     // Government IDs
     public function governmentIds(Employee $employee): JsonResponse
     {
-        return response()->json([
-            'data' => $employee->governmentIds,
-        ]);
+        return response()->json(['data' => $employee->governmentIds]);
     }
 
     public function storeGovernmentId(Request $request, Employee $employee): JsonResponse
@@ -132,7 +183,7 @@ class EmployeeController extends Controller
         $validated = $request->validate([
             'type' => 'required|in:tin,sss,philhealth,pagibig',
             'number' => 'required|string|max:50',
-            'remarks' => 'nullable|string',
+            'remarks' => 'nullable|string|max:255',
         ]);
 
         $validated['employee_id'] = $employee->id;
@@ -151,7 +202,7 @@ class EmployeeController extends Controller
         $validated = $request->validate([
             'type' => 'sometimes|required|in:tin,sss,philhealth,pagibig',
             'number' => 'sometimes|required|string|max:50',
-            'remarks' => 'nullable|string',
+            'remarks' => 'nullable|string|max:255',
         ]);
 
         $governmentId->update($validated);
@@ -179,16 +230,31 @@ class EmployeeController extends Controller
     public function storeDocument(Request $request, Employee $employee): JsonResponse
     {
         $request->validate([
+            'name' => 'nullable|string|max:255',
             'type' => 'required|in:contract,id,other',
+            'version_label' => 'nullable|string|max:50',
+            'parent_document_id' => 'nullable|uuid|exists:employee_documents,id',
             'file' => 'required|file|max:10240', // 10MB max
         ]);
 
         $file = $request->file('file');
         $path = $file->store('employee-documents/' . $employee->id, 'public');
 
+        // If adding a new version to an existing document
+        if ($request->parent_document_id) {
+            $parent = EmployeeDocument::find($request->parent_document_id);
+            $version = ($parent->version ?? 1) + 1;
+        } else {
+            $version = 1;
+        }
+
         $document = EmployeeDocument::create([
             'employee_id' => $employee->id,
+            'name' => $request->name ?? $file->getClientOriginalName(),
             'type' => $request->type,
+            'version' => $version,
+            'version_label' => $request->version_label ?? ("v{$version}.0"),
+            'parent_document_id' => $request->parent_document_id,
             'filename' => $file->getClientOriginalName(),
             'file_path' => $path,
             'mime_type' => $file->getMimeType(),
@@ -264,71 +330,60 @@ class EmployeeController extends Controller
         return response()->json(['message' => 'Dependent deleted successfully.']);
     }
 
-    // Employment History
-    public function history(Employee $employee): JsonResponse
+    // Employment Histories
+    public function histories(Employee $employee): JsonResponse
     {
-        return response()->json([
-            'data' => $employee->employmentHistories()->with(['department', 'position'])->orderBy('effective_date', 'desc')->get(),
-        ]);
+        return response()->json(['data' => $employee->employmentHistories->sortBy('effective_date')->values()]);
     }
 
     public function storeHistory(Request $request, Employee $employee): JsonResponse
     {
         $validated = $request->validate([
-            'department_id' => 'nullable|uuid|exists:departments,id',
-            'position_id' => 'nullable|uuid|exists:positions,id',
-            'employment_status' => 'required|in:regular,probationary,contractual,resigned,terminated',
+            'department_id' => 'required|uuid|exists:departments,id',
+            'position_id' => 'required|uuid|exists:positions,id',
+            'employment_status' => 'required|in:probationary,regular,contractual,resigned,terminated',
             'salary' => 'nullable|numeric|min:0',
-            'effective_date' => 'required|date',
-            'end_date' => 'nullable|date|after_or_equal:effective_date',
-            'remarks' => 'nullable|string',
+            'effective_date' => 'required|date|before:tomorrow',
+            'end_date' => 'nullable|date|after:effective_date',
+            'remarks' => 'nullable|string|max:255',
         ]);
 
         $validated['employee_id'] = $employee->id;
         $history = EmploymentHistory::create($validated);
 
-        // Also update the employee's current status
-        $employee->update([
-            'department_id' => $validated['department_id'] ?? $employee->department_id,
-            'position_id' => $validated['position_id'] ?? $employee->position_id,
-            'employment_status' => $validated['employment_status'],
-        ]);
-
         return response()->json([
-            'data' => $history->load(['department', 'position']),
-            'message' => 'Employment history added successfully.',
+            'data' => $history,
+            'message' => 'Employment history entry added.',
         ], 201);
     }
 
-    protected function validateEmployee(Request $request, ?string $ignoreId = null): array
+    public function updateHistory(Request $request, Employee $employee, EmploymentHistory $history): JsonResponse
     {
-        $rules = [
-            'first_name' => 'required|string|max:100',
-            'last_name' => 'required|string|max:100',
-            'middle_name' => 'nullable|string|max:100',
-            'suffix' => 'nullable|string|max:20',
-            'birth_date' => 'required|date|before:today',
-            'gender' => 'required|in:male,female',
-            'civil_status' => 'required|in:single,married,widowed,separated',
-            'nationality' => 'nullable|string|max:100',
-            'email' => 'required|email|unique:employees,email' . ($ignoreId ? ",{$ignoreId}" : ''),
-            'phone' => 'nullable|string|max:30',
-            'address_region' => 'nullable|string|max:100',
-            'address_province' => 'nullable|string|max:100',
-            'address_city' => 'nullable|string|max:100',
-            'address_barangay' => 'nullable|string|max:100',
-            'address_street' => 'nullable|string',
-            'department_id' => 'nullable|uuid|exists:departments,id',
-            'position_id' => 'nullable|uuid|exists:positions,id',
-            'employment_status' => 'required|in:regular,probationary,contractual,resigned,terminated',
-            'hire_date' => 'required|date',
-            'end_date' => 'nullable|date|after_or_equal:hire_date',
-            'tin' => 'nullable|string|max:50',
-            'sss_number' => 'nullable|string|max:50',
-            'philhealth_number' => 'nullable|string|max:50',
-            'pagibig_number' => 'nullable|string|max:50',
-        ];
+        abort_unless($history->employee_id === $employee->id, 404);
 
-        return $request->validate($rules);
+        $validated = $request->validate([
+            'department_id' => 'sometimes|required|uuid|exists:departments,id',
+            'position_id' => 'sometimes|required|uuid|exists:positions,id',
+            'employment_status' => 'sometimes|required|in:probationary,regular,contractual,resigned,terminated',
+            'salary' => 'nullable|numeric|min:0',
+            'effective_date' => 'sometimes|required|date|before:tomorrow',
+            'end_date' => 'nullable|date|after:effective_date',
+            'remarks' => 'nullable|string|max:255',
+        ]);
+
+        $history->update($validated);
+
+        return response()->json([
+            'data' => $history,
+            'message' => 'Employment history entry updated.',
+        ]);
+    }
+
+    public function destroyHistory(Employee $employee, EmploymentHistory $history): JsonResponse
+    {
+        abort_unless($history->employee_id === $employee->id, 404);
+        $history->delete();
+
+        return response()->json(['message' => 'Employment history entry deleted.']);
     }
 }

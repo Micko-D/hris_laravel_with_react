@@ -8,14 +8,6 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import type { EmployeeFormData } from '@/types/employee'
-import { useFormErrors } from '@/hooks/use-form-errors'
-
-interface PersonalInfoTabProps {
-    data: EmployeeFormData
-    setData: (key: keyof EmployeeFormData, value: string) => void
-    errors: Partial<Record<keyof EmployeeFormData, string>>
-    readonly?: boolean
-}
 
 const GENDER_OPTIONS = [
     { value: 'male', label: 'Male' },
@@ -28,6 +20,13 @@ const CIVIL_STATUS_OPTIONS = [
     { value: 'widowed', label: 'Widowed' },
     { value: 'separated', label: 'Separated' },
 ]
+
+interface PersonalInfoTabProps {
+    data: EmployeeFormData
+    setData: (key: keyof EmployeeFormData, value: string) => void
+    errors: Partial<Record<keyof EmployeeFormData, string>>
+    readonly?: boolean
+}
 
 export function PersonalInfoTab({
     data,
@@ -91,6 +90,7 @@ export function PersonalInfoTab({
                         <Input
                             id="birth_date"
                             type="date"
+                            max={new Date().toISOString().split('T')[0]}
                             value={data.birth_date}
                             onChange={(e) => setData('birth_date', e.target.value)}
                             disabled={readonly}
@@ -100,11 +100,11 @@ export function PersonalInfoTab({
                     <div className="space-y-1.5">
                         <Label htmlFor="gender">Gender *</Label>
                         <Select
-                            value={data.gender}
+                            value={data.gender || 'male'}
                             onValueChange={(v) => setData('gender', v)}
                             disabled={readonly}
                         >
-                            <SelectTrigger invalid={!!errors.gender}>
+                            <SelectTrigger>
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -119,11 +119,11 @@ export function PersonalInfoTab({
                     <div className="space-y-1.5">
                         <Label htmlFor="civil_status">Civil Status *</Label>
                         <Select
-                            value={data.civil_status}
+                            value={data.civil_status || 'single'}
                             onValueChange={(v) => setData('civil_status', v)}
                             disabled={readonly}
                         >
-                            <SelectTrigger invalid={!!errors.civil_status}>
+                            <SelectTrigger>
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

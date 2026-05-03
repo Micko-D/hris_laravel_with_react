@@ -43,7 +43,7 @@ export function EmploymentTab({
                     <div className="space-y-1.5">
                         <Label htmlFor="department_id">Department</Label>
                         <Select
-                            value={data.department_id ?? ''}
+                            value={data.department_id ?? undefined}
                             onValueChange={(v) => setData('department_id', v)}
                             disabled={readonly}
                         >
@@ -62,7 +62,7 @@ export function EmploymentTab({
                     <div className="space-y-1.5">
                         <Label htmlFor="position_id">Position / Job Title</Label>
                         <Select
-                            value={data.position_id ?? ''}
+                            value={data.position_id ?? undefined}
                             onValueChange={(v) => setData('position_id', v)}
                             disabled={readonly}
                         >
@@ -85,7 +85,7 @@ export function EmploymentTab({
                             onValueChange={(v) => setData('employment_status', v)}
                             disabled={readonly}
                         >
-                            <SelectTrigger invalid={!!errors.employment_status}>
+                            <SelectTrigger>
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -109,6 +109,7 @@ export function EmploymentTab({
                         <Input
                             id="hire_date"
                             type="date"
+                            max={new Date().toISOString().split('T')[0]}
                             value={data.hire_date}
                             onChange={(e) => setData('hire_date', e.target.value)}
                             disabled={readonly}
@@ -120,7 +121,7 @@ export function EmploymentTab({
                         <Input
                             id="end_date"
                             type="date"
-                            value={data.end_date ?? ''}
+                            value={data.end_date}
                             onChange={(e) => setData('end_date', e.target.value)}
                             disabled={readonly}
                         />
@@ -139,7 +140,7 @@ export function EmploymentTab({
                         <Label htmlFor="tin">TIN</Label>
                         <Input
                             id="tin"
-                            value={data.tin ?? ''}
+                            value={data.tin}
                             onChange={(e) => setData('tin', e.target.value)}
                             disabled={readonly}
                             placeholder="XXX-XXX-XXX-XXX"
@@ -149,7 +150,7 @@ export function EmploymentTab({
                         <Label htmlFor="sss_number">SSS Number</Label>
                         <Input
                             id="sss_number"
-                            value={data.sss_number ?? ''}
+                            value={data.sss_number}
                             onChange={(e) => setData('sss_number', e.target.value)}
                             disabled={readonly}
                             placeholder="XX-XXXXXXX-X"
@@ -159,7 +160,7 @@ export function EmploymentTab({
                         <Label htmlFor="philhealth_number">PhilHealth Number</Label>
                         <Input
                             id="philhealth_number"
-                            value={data.philhealth_number ?? ''}
+                            value={data.philhealth_number}
                             onChange={(e) => setData('philhealth_number', e.target.value)}
                             disabled={readonly}
                             placeholder="XXXX-XXXX-XXXX"
@@ -169,7 +170,7 @@ export function EmploymentTab({
                         <Label htmlFor="pagibig_number">Pag-IBIG Number</Label>
                         <Input
                             id="pagibig_number"
-                            value={data.pagibig_number ?? ''}
+                            value={data.pagibig_number}
                             onChange={(e) => setData('pagibig_number', e.target.value)}
                             disabled={readonly}
                             placeholder="XXXX-XXXX-XXXX"

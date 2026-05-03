@@ -65,8 +65,8 @@ export function EmployeeTable({
             emp.email.toLowerCase().includes(search.toLowerCase())
 
         const matchDept =
-            !departmentFilter || emp.department_id === departmentFilter
-        const matchStatus = !statusFilter || emp.employment_status === statusFilter
+            !departmentFilter || departmentFilter === '__all__' || emp.department_id === departmentFilter
+        const matchStatus = !statusFilter || statusFilter === '__all__' || emp.employment_status === statusFilter
 
         return matchSearch && matchDept && matchStatus
     })
@@ -92,7 +92,7 @@ export function EmployeeTable({
                         <SelectValue placeholder="All Departments" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="">All Departments</SelectItem>
+                        <SelectItem value="__all__">All Departments</SelectItem>
                         {departments.map((d) => (
                             <SelectItem key={d.id} value={d.id}>
                                 {d.name}
@@ -105,7 +105,7 @@ export function EmployeeTable({
                         <SelectValue placeholder="All Status" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="">All Status</SelectItem>
+                        <SelectItem value="__all__">All Status</SelectItem>
                         {Object.entries(STATUS_LABELS).map(([value, label]) => (
                             <SelectItem key={value} value={value}>
                                 {label}

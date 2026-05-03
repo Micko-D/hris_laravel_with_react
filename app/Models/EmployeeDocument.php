@@ -23,7 +23,11 @@ class EmployeeDocument extends Model
 
     protected $fillable = [
         'employee_id',
+        'name',
         'type',
+        'version',
+        'version_label',
+        'parent_document_id',
         'filename',
         'file_path',
         'mime_type',
@@ -32,10 +36,21 @@ class EmployeeDocument extends Model
 
     protected $casts = [
         'file_size' => 'integer',
+        'version' => 'integer',
     ];
 
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function parentDocument(): BelongsTo
+    {
+        return $this->belongsTo(EmployeeDocument::class, 'parent_document_id');
+    }
+
+    public function versions(): BelongsTo
+    {
+        return $this->belongsTo(EmployeeDocument::class, 'id');
     }
 }

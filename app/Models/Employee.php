@@ -46,6 +46,17 @@ class Employee extends Model
         'birth_date' => 'date',
         'hire_date' => 'date',
         'end_date' => 'date',
+        'phone' => 'string',
+        'address_region' => 'string',
+        'address_province' => 'string',
+        'address_city' => 'string',
+        'address_barangay' => 'string',
+        'address_street' => 'string',
+        'suffix' => 'string',
+        'tin' => 'string',
+        'sss_number' => 'string',
+        'philhealth_number' => 'string',
+        'pagibig_number' => 'string',
     ];
 
     // Auto-generate employee number

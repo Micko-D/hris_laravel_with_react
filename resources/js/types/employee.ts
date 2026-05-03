@@ -63,11 +63,16 @@ export interface GovernmentId {
 export interface EmployeeDocument {
     id: string;
     employee_id: string;
+    name: string | null;
     type: 'contract' | 'id' | 'other';
+    version: number;
+    version_label: string | null;
+    parent_document_id: string | null;
     filename: string;
     file_path: string;
     mime_type: string | null;
     file_size: number | null;
+    created_at: string;
 }
 
 export interface EmployeeDependent {
