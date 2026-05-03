@@ -22,10 +22,12 @@ class EmployeeController extends Controller
             ->paginate(15);
 
         $departments = Department::where('is_active', true)->orderBy('name')->get();
+        $positions = Position::where('is_active', true)->orderBy('name')->get();
 
         return Inertia::render('employees/index', [
             'employees' => $employees,
             'departments' => $departments,
+            'positions' => $positions,
         ]);
     }
 
@@ -51,6 +53,8 @@ class EmployeeController extends Controller
             'department_id' => $employee->department_id,
             'position_id' => $employee->position_id,
             'employment_status' => $employee->employment_status,
+            'salary' => $validated['salary'] ?? null,
+            'salary_type' => $validated['salary_type'] ?? 'monthly',
             'effective_date' => $employee->hire_date,
             'remarks' => 'Initial hiring',
         ]);
@@ -96,20 +100,44 @@ class EmployeeController extends Controller
         $oldDept = $employee->department_id;
         $oldPos = $employee->position_id;
         $oldStatus = $employee->employment_status;
+        $oldSalary = $employee->salary;
+        $oldSalaryType = $employee->salary_type;
 
         $employee->update($validated);
 
-        if ($oldDept !== $employee->department_id
-            || $oldPos !== $employee->position_id
-            || $oldStatus !== $employee->employment_status
-        ) {
+        $changedFields = [];
+
+        if ($oldDept !== $employee->department_id) $changedFields[] = 'department';
+        if ($oldPos !== $employee->position_id) $changedFields[] = 'position';
+        if ($oldStatus !== $employee->employment_status) $changedFields[] = 'status';
+        if (array_key_exists('salary', $validated) && (string) $oldSalary !== (string) ($validated['salary'] ?? null)) $changedFields[] = 'salary';
+        if (array_key_exists('salary_type', $validated) && $oldSalaryType !== $validated['salary_type']) $changedFields[] = 'salary type';
+        if (array_key_exists('end_date', $validated) && $employee->end_date) $changedFields[] = 'end date';
+
+        if (count($changedFields) > 0) {
+            $last = array_slice($changedFields, -1)[0];
+            $rest = array_slice($changedFields, 0, -1);
+            if (count($rest) > 0) {
+                $remarks = 'Updated ' . implode(', ', $rest) . ' and ' . $last . '.';
+            } else {
+                $remarks = 'Updated ' . $last . '.';
+            }
+
+            if (array_key_exists('end_date', $validated) && $employee->end_date) {
+                $statusLabel = $employee->employment_status;
+                $remarks = ucfirst($statusLabel) . " effective " . $employee->end_date->format('M j, Y') . ".";
+            }
+
             \App\Models\EmploymentHistory::create([
                 'employee_id' => $employee->id,
                 'department_id' => $employee->department_id,
                 'position_id' => $employee->position_id,
                 'employment_status' => $employee->employment_status,
+                'salary' => $validated['salary'] ?? null,
+                'salary_type' => $validated['salary_type'] ?? 'monthly',
                 'effective_date' => now(),
-                'remarks' => 'Employment details updated via employee edit.',
+                'end_date' => $employee->end_date,
+                'remarks' => $remarks,
             ]);
         }
 
@@ -146,6 +174,8 @@ class EmployeeController extends Controller
             'employment_status' => 'required|in:regular,probationary,contractual,resigned,terminated',
             'hire_date' => 'required|date',
             'end_date' => 'nullable|date|after_or_equal:hire_date',
+            'salary' => 'nullable|numeric|min:0',
+            'salary_type' => 'nullable|in:monthly,daily,hourly',
             'tin' => 'nullable|string|max:50',
             'sss_number' => 'nullable|string|max:50',
             'philhealth_number' => 'nullable|string|max:50',

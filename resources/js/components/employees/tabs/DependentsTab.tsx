@@ -22,6 +22,12 @@ import {
 } from '@/components/ui/dialog'
 import type { EmployeeDependent } from '@/types/employee'
 
+function toDateValue(value: string | Date | null | undefined): string {
+    if (!value) return ''
+    if (value instanceof Date) return value.toISOString().split('T')[0]
+    return value.split('T')[0]
+}
+
 const RELATIONSHIP_OPTIONS = [
     { value: 'spouse', label: 'Spouse' },
     { value: 'child', label: 'Child' },
@@ -74,7 +80,7 @@ export function DependentsTab({
     const openEdit = (dep: EmployeeDependent) => {
         setName(dep.name)
         setRelationship(dep.relationship)
-        setBirthDate(dep.birth_date ?? '')
+        setBirthDate(toDateValue(dep.birth_date))
         setContactNumber(dep.contact_number ?? '')
         setIsDependentForTax(dep.is_dependent_for_tax)
         setEditingId(dep.id)
@@ -173,8 +179,8 @@ export function DependentsTab({
                     No dependents on record. Dependents are used for tax exemption purposes.
                 </p>
             ) : (
-                <div className="rounded-md border">
-                    <table className="w-full text-sm">
+                <div className="rounded-md border overflow-x-auto">
+                    <table className="w-full text-sm min-w-[600px]">
                         <thead>
                             <tr className="border-b bg-muted/50">
                                 <th className="h-10 px-4 text-left font-medium">Name</th>

@@ -36,6 +36,8 @@ class Employee extends Model
         'employment_status',
         'hire_date',
         'end_date',
+        'salary',
+        'salary_type',
         'tin',
         'sss_number',
         'philhealth_number',
@@ -57,6 +59,8 @@ class Employee extends Model
         'sss_number' => 'string',
         'philhealth_number' => 'string',
         'pagibig_number' => 'string',
+        'salary' => 'decimal:2',
+        'salary_type' => 'string',
     ];
 
     // Auto-generate employee number
@@ -100,7 +104,7 @@ class Employee extends Model
 
     public function employmentHistories(): HasMany
     {
-        return $this->hasMany(EmploymentHistory::class);
+        return $this->hasMany(EmploymentHistory::class)->with(['department', 'position'])->orderBy('effective_date', 'desc');
     }
 
     public function getFullNameAttribute(): string

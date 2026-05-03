@@ -25,12 +25,23 @@ class EmploymentHistory extends Model
         self::STATUS_TERMINATED,
     ];
 
+    public const SALARY_MONTHLY = 'monthly';
+    public const SALARY_DAILY = 'daily';
+    public const SALARY_HOURLY = 'hourly';
+
+    public const SALARY_TYPES = [
+        self::SALARY_MONTHLY,
+        self::SALARY_DAILY,
+        self::SALARY_HOURLY,
+    ];
+
     protected $fillable = [
         'employee_id',
         'department_id',
         'position_id',
         'employment_status',
         'salary',
+        'salary_type',
         'effective_date',
         'end_date',
         'remarks',

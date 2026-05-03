@@ -21,6 +21,8 @@ export interface Employee {
     employment_status: 'regular' | 'probationary' | 'contractual' | 'resigned' | 'terminated';
     hire_date: string;
     end_date: string | null;
+    salary: string | null;
+    salary_type: string | null;
     tin: string | null;
     sss_number: string | null;
     philhealth_number: string | null;
@@ -92,11 +94,16 @@ export interface EmploymentHistory {
     position_id: string | null;
     employment_status: string;
     salary: string | null;
+    salary_type: 'monthly' | 'daily' | 'hourly' | null;
     effective_date: string;
     end_date: string | null;
     remarks: string | null;
+    created_at: string;
     department?: Department;
     position?: Position;
 }
 
-export type EmployeeFormData = Omit<Employee, 'id' | 'employee_number' | 'department' | 'position' | 'government_ids' | 'documents' | 'dependents' | 'employment_histories' | 'created_at' | 'updated_at'>;
+export type EmployeeFormData = Omit<Employee, 'id' | 'employee_number' | 'department' | 'position' | 'government_ids' | 'documents' | 'dependents' | 'employment_histories' | 'created_at' | 'updated_at'> & {
+    salary: string
+    salary_type: 'monthly' | 'daily' | 'hourly'
+}

@@ -164,8 +164,8 @@ export function GovernmentIdsTab({
                     No government IDs on record.
                 </p>
             ) : (
-                <div className="rounded-md border">
-                    <table className="w-full text-sm">
+                <div className="rounded-md border overflow-x-auto">
+                    <table className="w-full text-sm min-w-[600px]">
                         <thead>
                             <tr className="border-b bg-muted/50">
                                 <th className="h-10 px-4 text-left font-medium">ID Type</th>

@@ -186,6 +186,17 @@ class EmployeeController extends Controller
             'remarks' => 'nullable|string|max:255',
         ]);
 
+        $duplicate = GovernmentId::where('type', $validated['type'])
+            ->where('number', $validated['number'])
+            ->where('employee_id', '!=', $employee->id)
+            ->first();
+
+        if ($duplicate) {
+            return response()->json([
+                'errors' => ['number' => ["This {$validated['type']} number is already registered to another employee."]],
+            ], 422);
+        }
+
         $validated['employee_id'] = $employee->id;
         $governmentId = GovernmentId::create($validated);
 
@@ -204,6 +215,19 @@ class EmployeeController extends Controller
             'number' => 'sometimes|required|string|max:50',
             'remarks' => 'nullable|string|max:255',
         ]);
+
+        if (isset($validated['number'])) {
+            $duplicate = GovernmentId::where('type', $validated['type'] ?? $governmentId->type)
+                ->where('number', $validated['number'])
+                ->where('id', '!=', $governmentId->id)
+                ->first();
+
+            if ($duplicate) {
+                return response()->json([
+                    'errors' => ['number' => ["This {$validated['type']} number is already registered to another employee."]],
+                ], 422);
+            }
+        }
 
         $governmentId->update($validated);
 

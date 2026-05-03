@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { router } from '@inertiajs/react'
 import { Save } from 'lucide-react'
 import { toast } from 'sonner'
@@ -41,6 +41,20 @@ function toDateValue(value: string | Date | null | undefined): string {
 
 const SESSION_TAB_KEY = 'hris_employee_active_tab'
 
+const REQUIRED_FIELDS: { key: keyof EmployeeFormData; label: string }[] = [
+    { key: 'first_name', label: 'First Name' },
+    { key: 'last_name', label: 'Last Name' },
+    { key: 'birth_date', label: 'Birth Date' },
+    { key: 'gender', label: 'Gender' },
+    { key: 'civil_status', label: 'Civil Status' },
+    { key: 'email', label: 'Email' },
+    { key: 'department_id', label: 'Department' },
+    { key: 'position_id', label: 'Position' },
+    { key: 'employment_status', label: 'Employment Status' },
+    { key: 'hire_date', label: 'Hire Date' },
+    { key: 'salary', label: 'Salary' },
+]
+
 export function EmployeeForm({
     employee,
     departments,
@@ -51,12 +65,15 @@ export function EmployeeForm({
     employmentHistories: initialHistories = [],
     mode,
 }: EmployeeFormProps) {
-    const [activeTab, setActiveTab] = useState<TabId>(() => {
-        if (typeof sessionStorage !== 'undefined') {
-            return (sessionStorage.getItem(SESSION_TAB_KEY) as TabId) ?? 'personal'
+    const [activeTab, setActiveTab] = useState<TabId>('personal')
+
+    // Sync active tab from sessionStorage AFTER hydration (avoids SSR mismatch)
+    useEffect(() => {
+        const stored = sessionStorage.getItem(SESSION_TAB_KEY) as TabId | null
+        if (stored && stored !== activeTab) {
+            setActiveTab(stored)
         }
-        return 'personal'
-    })
+    }, [])
 
     const [governmentIds, setGovernmentIds] = useState<GovernmentId[]>(initialGovernmentIds)
     const [dependents, setDependents] = useState<EmployeeDependent[]>(initialDependents)
@@ -84,17 +101,24 @@ export function EmployeeForm({
         employment_status: employee?.employment_status ?? 'probationary',
         hire_date: toDateValue(employee?.hire_date),
         end_date: toDateValue(employee?.end_date),
+        salary: employee?.salary ?? '',
+        salary_type: (employee?.salary_type as 'monthly' | 'daily' | 'hourly') ?? 'monthly',
         tin: employee?.tin ?? '',
         sss_number: employee?.sss_number ?? '',
         philhealth_number: employee?.philhealth_number ?? '',
         pagibig_number: employee?.pagibig_number ?? '',
     })
 
-    const handleSubResourceChange = () => {
+    const handleTabChange = useCallback((tabId: TabId) => {
+        setActiveTab(tabId)
+        sessionStorage.setItem(SESSION_TAB_KEY, tabId)
+    }, [])
+
+    const handleSubResourceChange = useCallback(() => {
         if (!employee?.id) return
         sessionStorage.setItem(SESSION_TAB_KEY, activeTab)
         router.get(`/employees/${employee.id}/edit`, {}, { preserveScroll: true })
-    }
+    }, [employee?.id, activeTab])
 
     const handleSetData = (key: keyof EmployeeFormData, value: string) => {
         setData((prevData) => ({
@@ -104,6 +128,20 @@ export function EmployeeForm({
     }
 
     const handleSubmit = () => {
+        if (mode !== 'view') {
+            const missing = REQUIRED_FIELDS
+                .filter((f) => {
+                    const val = data[f.key]
+                    return !val || (typeof val === 'string' && val.trim() === '')
+                })
+                .map((f) => f.label)
+
+            if (missing.length > 0) {
+                toast.error(`Please fill in required fields: ${missing.join(', ')}`)
+                return
+            }
+        }
+
         if (mode === 'create') {
             router.post('/employees', data, {
                 onSuccess: () => {
@@ -131,10 +169,7 @@ export function EmployeeForm({
                         <button
                             key={tab.id}
                             type="button"
-                            onClick={() => {
-                                setActiveTab(tab.id)
-                                sessionStorage.setItem(SESSION_TAB_KEY, tab.id)
-                            }}
+                            onClick={() => handleTabChange(tab.id)}
                             className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
                                 activeTab === tab.id
                                     ? 'border-primary text-primary'
@@ -171,6 +206,7 @@ export function EmployeeForm({
                         errors={{}}
                         departments={departments}
                         positions={positions}
+                        governmentIds={governmentIds}
                         readonly={isReadonly}
                     />
                 )}

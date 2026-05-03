@@ -1,12 +1,12 @@
 import { Head, usePage } from '@inertiajs/react'
 import { EmployeeTable } from '@/components/employees/EmployeeTable'
-import { employeesCreate } from '@/routes/employees'
-import type { Employee, Department } from '@/types/employee'
+import type { Employee, Department, Position } from '@/types/employee'
 
 export default function EmployeesIndexPage() {
-    const { employees, departments } = usePage<{
+    const { employees, departments, positions } = usePage<{
         employees: { data: Employee[]; links: unknown[] }
         departments: Department[]
+        positions: Position[]
     }>().props
 
     return (
@@ -24,6 +24,7 @@ export default function EmployeesIndexPage() {
                 <EmployeeTable
                     employees={employees.data}
                     departments={departments}
+                    positions={positions}
                     onDelete={(id) => {
                         if (confirm('Are you sure you want to delete this employee?')) {
                             fetch(`/api/v1/employees/${id}`, { method: 'DELETE' }).then(() => {
